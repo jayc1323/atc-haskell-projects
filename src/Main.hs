@@ -69,9 +69,16 @@ handleInput "update" taskList = do
       prev <- getLine
       putStrLn "Enter new description"
       new <- getLine
-      let newList = modifyList prev new taskList
-      putStrLn "Description Updated"
-      pure (True,newList)
+      let (changed,newList) = modifyList prev new taskList
+      case changed of 
+        True -> do
+          putStrLn "Description update successfully."
+          pure (True,newList)
+        False -> do
+          putStrLn "No task matches description entered."
+          pure (True,taskList)
+
+      
     "priority" -> do 
       putStrLn "Enter task description"
       desc <- getLine
@@ -82,14 +89,27 @@ handleInput "update" taskList = do
             putStrLn "Invalid priority entered"
             pure (True,taskList)
           Just newPriority -> do
-            putStrLn $ ("Updated task priority to " ++ priority)
-            pure (True,updatePriority desc newPriority taskList)
+           
+            let (changed,newList) = updatePriority desc newPriority taskList
+            case changed of 
+              True -> do
+                putStrLn $ "Priority Update successfully to " <> (show newPriority)
+                pure (True,newList)
+              False -> do
+                putStrLn "No task matches description entered."
+                pure (True,taskList)
+
     "status" -> do 
       putStrLn "Enter task description"
       desc <- getLine
-      putStrLn "Task Marked Complete."
-      pure (True,updateStatus desc taskList)
-    
+      let (changed,output) =  updateStatus desc taskList
+      case changed of 
+        True -> do
+          putStrLn "Task Marked Complete."
+          pure (True,output)
+        False -> do
+          putStrLn "No task matches description entered."
+          pure (True,taskList)
     _ -> do
       putStrLn "Invalid update command"
       pure (True,taskList)
@@ -125,29 +145,36 @@ printTask (NewTask desc date status priority) =
 getDesc::Task -> String 
 getDesc (NewTask desc _ _ _) = desc 
 
-modifyList::String -> String -> [Task] -> [Task]
-modifyList prevDesc newDesc [] = []
+modifyList::String -> String -> [Task] -> (Bool,[Task])
+modifyList prevDesc newDesc [] = (False,[])
 modifyList prevDesc newDesc ((NewTask desc d s p):xs) =
   if (==) prevDesc desc 
-    then (NewTask newDesc d s p):xs
+    then (True,(NewTask newDesc d s p):xs)
   else
-    modifyList prevDesc newDesc xs 
+    let (changed,tail_val) = modifyList prevDesc newDesc xs 
+    in
+     (False || changed,(NewTask desc d s p):tail_val)
 --------------------------------------------------------------------------
-updateStatus::String -> [Task] -> [Task]
-updateStatus desc [] = []
+updateStatus::String -> [Task] -> (Bool,[Task])
+updateStatus desc [] = (False,[])
 updateStatus desc ((NewTask description d s p):xs) =
    if (==) description desc 
-    then (NewTask desc d Complete p):xs
+    then (True,(NewTask desc d Complete p):xs)
   else
-    updateStatus desc xs
+    let (changed,tail_val) = updateStatus desc xs 
+    in
+      (False || changed,(NewTask description d s p):tail_val)
 --------------------------------------------------------------------------
-updatePriority::String -> Priority -> [Task] -> [Task]
-updatePriority prevDesc newPriority [] = []
+updatePriority::String -> Priority -> [Task] -> (Bool,[Task])
+updatePriority prevDesc newPriority [] = (False,[])
 updatePriority prevDesc newPriority ((NewTask desc d s p):xs) =
    if (==) prevDesc desc 
-    then (NewTask desc d s newPriority):xs
+    then (True,(NewTask desc d s newPriority):xs)
   else
-    updatePriority prevDesc newPriority xs
+    let (changed,tail_list) = updatePriority prevDesc newPriority xs
+    in
+      (False || changed,(NewTask desc d s p):tail_list)
+    
 --------------------------------------------------------------------------
 
 
