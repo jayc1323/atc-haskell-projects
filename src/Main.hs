@@ -4,11 +4,15 @@ import Text.Read (readMaybe)
 import System.IO (hFlush, stdout)
 import Data.List.Split
 import Control.Exception (try, SomeException)
+import Data.Ord
+import Data.List 
+
 
 
 main :: IO ()
 main = do
-  putStrLn "Welcome to my TODO List Manager!"
+  putStrLn "Welcome to TODO List Manager!"
+  putStrLn "Enter '--help' to see commands available"
   taskList <- readTasks savedTasks
   loop taskList
 
@@ -33,7 +37,8 @@ handleInput "--help" taskList = do
   putStrLn  "Commands Available: "
   putStrLn  "add"
   putStrLn  "delete"
-  putStrLn  "view"
+  putStrLn  "view (shows all tasks)"
+  putStrLn  "view-priority (shows incomplete tasks sorted by date and priority)"
   putStrLn  "update"
   putStrLn  "exit"
   pure (True,taskList)
@@ -46,12 +51,19 @@ handleInput "add" taskList = do
                     pure (True,taskList)
     Right task ->  do
                    putStrLn "Added new Task: " 
-                   putStrLn (show task)
+                   putStrLn (printTask task)
                    pure (True,task : taskList)
 
 handleInput "view" taskList = do
-  mapM_ (putStrLn . printTask) taskList
-  pure (True,taskList)
+  case taskList of
+    [] -> do
+      putStrLn "No tasks to show !"
+      pure (True,taskList)
+    _ -> do
+       mapM_ (putStrLn . printTask) taskList
+       pure (True,taskList)
+
+ 
 
 handleInput "delete" taskList = do
   putStrLn "Enter description of the task to delete."
@@ -114,6 +126,14 @@ handleInput "update" taskList = do
       putStrLn "Invalid update command"
       pure (True,taskList)
 
+handleInput "view-priority" taskList = do
+  let pendingList = filter (\task -> getStatus task == Pending) taskList
+      sortedList = sortBy compareTasks pendingList
+  mapM_ (putStrLn . printTask) sortedList
+  pure (True, taskList)
+
+
+   
 handleInput _ taskList = 
   do
     putStrLn "Invalid Command , enter '--help' to see valid options"
@@ -123,15 +143,15 @@ handleInput _ taskList =
 data Priority =   High
                 | Medium
                 | Low
-                deriving (Show,Read)
+                deriving (Show,Read,Eq)
 data Status = Complete 
             | Pending
-            deriving (Show,Read)
+            deriving (Show,Read,Eq)
 
 type DueDate = Day 
 
 data Task = NewTask String DueDate Status Priority
-            deriving (Show,Read)
+            deriving (Show,Read,Eq)
 
 printTask :: Task -> String
 printTask (NewTask desc date status priority) =
@@ -219,9 +239,7 @@ writeToFile path task = do
                          a <- writeFile path task
                          return a
 
---a = show (NewTask "abc" (fromGregorian 2021 12 12) Pending High)
---b = read a :: Task  
--- Write a function to convert newline seperated Task representation to [Task]
+
 readTasks :: FilePath -> IO [Task]
 readTasks file = do
    ts <- try $ readFile file ::IO (Either SomeException String) 
@@ -232,9 +250,28 @@ readTasks file = do
       in 
       return $ map read taskListString
 
+
 writeTasks :: [Task] -> FilePath -> IO ()
 writeTasks [] path = return ()
 writeTasks tasks path = do
                          writeFile path $ init (unlines (map show tasks))
-tasks = [(NewTask "grocery" (fromGregorian 2021 12 12) Pending High ) ,
-         (NewTask "laundry" (fromGregorian 2021 12 6) Pending High )]
+
+-- Show Incomplete - 1 , 2 - Show Incomplete sorted by due date and priority
+instance Ord Priority where
+  Low <= Medium = True
+  Low <= High = True
+  Medium <= High = True 
+  _ <= _ = False 
+
+compareTasks :: Task -> Task -> Ordering
+compareTasks t1 t2 = 
+  comparing getDueDate t1 t2 <> comparing (Down . getPriority) t1 t2
+
+getDueDate :: Task -> Day
+getDueDate (NewTask _ dueDate _ _) = dueDate
+
+getPriority :: Task -> Priority
+getPriority (NewTask _ _ _ priority) = priority 
+
+getStatus :: Task -> Status
+getStatus (NewTask _ _ status _) = status  
