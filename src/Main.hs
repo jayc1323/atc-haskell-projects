@@ -6,25 +6,33 @@ import Data.List.Split
 import Control.Exception (try, SomeException)
 import Data.Ord
 import Data.List 
-
-
+------------------------------------------------------------------------------
+savedTasks = "saved_tasks"
 
 main :: IO ()
 main = do
   putStrLn "Welcome to TODO List Manager!"
   putStrLn "Enter '--help' to see commands available"
-  taskList <- readTasks savedTasks
-  loop taskList
+  taskList <- readTasks savedTasks -- read saved tasks from file.
+  loop taskList -- Pass the saved tasks (program state) to the main loop.
+
+-----------------------------------------------------------------------------
+-- loop accepts a command from the user and process it -> call handler functions
+-- to modify program state [Task] or quit .
 
 loop :: [Task] -> IO ()
 loop taskList = do
   putStr "Enter command: "
   hFlush stdout
   input <- getLine
-  isLooping <- handleInput input taskList
-  if (fst isLooping)
-    then loop (snd isLooping)
+  (continue,newList) <- handleInput input taskList
+  if continue 
+    then loop newList
     else return ()
+-------------------------------------------------------------------------------
+-- handleInput accepts a command and the current state of the todo Manager ,
+-- represented by a List of Task , and returns the updated State ([Task]) ,
+-- alongwith a boolean indicating whether the interactive loop should continue or not .
 
 handleInput :: String->[Task]-> IO (Bool,[Task])
 
@@ -35,12 +43,12 @@ handleInput "exit" taskList = do
 
 handleInput "--help" taskList = do
   putStrLn  "Commands Available: "
-  putStrLn  "add"
-  putStrLn  "delete"
-  putStrLn  "view (shows all tasks)"
-  putStrLn  "view-priority (shows incomplete tasks sorted by date and priority)"
-  putStrLn  "update"
-  putStrLn  "exit"
+  putStrLn  "'add'"
+  putStrLn  "'delete'"
+  putStrLn  "'view' (shows all tasks)"
+  putStrLn  "'view-priority' (shows incomplete tasks sorted by date and priority)"
+  putStrLn  "'update'"
+  putStrLn  "'exit' - Gracefully exit the app,saving the newly made changes"
   pure (True,taskList)
 
 handleInput "add" taskList = do
@@ -62,8 +70,6 @@ handleInput "view" taskList = do
     _ -> do
        mapM_ (putStrLn . printTask) taskList
        pure (True,taskList)
-
- 
 
 handleInput "delete" taskList = do
   putStrLn "Enter description of the task to delete."
@@ -132,14 +138,14 @@ handleInput "view-priority" taskList = do
   mapM_ (putStrLn . printTask) sortedList
   pure (True, taskList)
 
-
-   
 handleInput _ taskList = 
   do
     putStrLn "Invalid Command , enter '--help' to see valid options"
     pure (True,taskList)
 
 ------------------------------------------------------------------------------
+-- datatypes to model data for the todo manager
+
 data Priority =   High
                 | Medium
                 | Low
@@ -153,6 +159,9 @@ type DueDate = Day
 data Task = NewTask String DueDate Status Priority
             deriving (Show,Read,Eq)
 
+------------------------------------------------------------------------------
+
+-- printTask returns the String representation of a Task
 printTask :: Task -> String
 printTask (NewTask desc date status priority) =
   ("Description: " <> desc <> " | ") <>
@@ -160,10 +169,13 @@ printTask (NewTask desc date status priority) =
   ("Status: " <> show status <> " | ") <>
   ("Priority: " <> show priority <> "\n")
 
-
+------------------------------------------------------------------------------
+-- Task description getter
 
 getDesc::Task -> String 
 getDesc (NewTask desc _ _ _) = desc 
+------------------------------------------------------------------------------
+-- modifyList returns a new list with the changed description of a task
 
 modifyList::String -> String -> [Task] -> (Bool,[Task])
 modifyList prevDesc newDesc [] = (False,[])
@@ -175,6 +187,8 @@ modifyList prevDesc newDesc ((NewTask desc d s p):xs) =
     in
      (False || changed,(NewTask desc d s p):tail_val)
 --------------------------------------------------------------------------
+-- updateStatus returns a new List with the changed status of a Task
+
 updateStatus::String -> [Task] -> (Bool,[Task])
 updateStatus desc [] = (False,[])
 updateStatus desc ((NewTask description d s p):xs) =
@@ -185,6 +199,8 @@ updateStatus desc ((NewTask description d s p):xs) =
     in
       (False || changed,(NewTask description d s p):tail_val)
 --------------------------------------------------------------------------
+-- updatePriority returns a new List with the changed priority of a Task
+
 updatePriority::String -> Priority -> [Task] -> (Bool,[Task])
 updatePriority prevDesc newPriority [] = (False,[])
 updatePriority prevDesc newPriority ((NewTask desc d s p):xs) =
@@ -196,15 +212,8 @@ updatePriority prevDesc newPriority ((NewTask desc d s p):xs) =
       (False || changed,(NewTask desc d s p):tail_list)
     
 --------------------------------------------------------------------------
+--getTask returns a String (error) or a Task 
 
-
-buildTask :: String -> DueDate -> Priority -> IO Task
-buildTask description date priority = do
-    currTime <- getCurrentTime
-    let today = utctDay currTime
-    if date < today
-      then error "Please enter a valid date"
-      else return (NewTask description date Pending priority)
 getTask :: IO (Either String Task)
 getTask = do
   putStrLn ("Enter Task Description")
@@ -224,22 +233,9 @@ getTask = do
         case readMaybe p ::Maybe Priority of
           Nothing -> return $ Left "Invalid priority entered."
           Just priority -> return $ Right (NewTask description date Pending priority)
-      
-todoList::[Task]
-todoList = []
+--------------------------------------------------------------------------------
 
-readFromFile:: FilePath -> IO String 
-readFromFile path = do
-                    x <- readFile path 
-                    return x
-savedTasks = "saved_tasks"
-
-writeToFile:: FilePath -> String -> IO ()
-writeToFile path task = do 
-                         a <- writeFile path task
-                         return a
-
-
+--readTasks reads the saved Tasks from a file and returns a List[Task]
 readTasks :: FilePath -> IO [Task]
 readTasks file = do
    ts <- try $ readFile file ::IO (Either SomeException String) 
@@ -249,12 +245,15 @@ readTasks file = do
       let taskListString = splitOn "\n" val
       in 
       return $ map read taskListString
-
+------------------------------------------------------------------------------
+-- writeTasks writes the List of Tasks to a file.
 
 writeTasks :: [Task] -> FilePath -> IO ()
 writeTasks [] path = return ()
 writeTasks tasks path = do
                          writeFile path $ init (unlines (map show tasks))
+
+------------------------------------------------------------------------------
 
 -- Show Incomplete - 1 , 2 - Show Incomplete sorted by due date and priority
 instance Ord Priority where
@@ -275,3 +274,4 @@ getPriority (NewTask _ _ _ priority) = priority
 
 getStatus :: Task -> Status
 getStatus (NewTask _ _ status _) = status  
+-------------------------------------------------------------------------------
